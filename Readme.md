@@ -1,4 +1,4 @@
-# Lab okolje env01: dostop
+# Lab okolje env: dostop
 
 Tečaj: **Docker in Ansible v praksi**
 
