@@ -1,0 +1,34 @@
+---
+# Vaja A02, korak 4: vaš prvi playbook. Kopirajte v projekt in poženite:
+#   cp ~/vaje/A02-arhitektura/priprava.yml ~/projekt/ && cd ~/projekt
+#   ansible-playbook priprava.yml
+# Playbook je napisan, manjka ena vrstica (glej TODO pri tasku "Ali je Docker
+# nameščen?"). Rešitev: ~/resitve/A02-arhitektura/priprava.yml
+- name: Osnovna priprava hostov
+  hosts: docker_hosts            # play teče na vseh hostih iz te skupine (AWS: control)
+  become: true                   # kot root (sudo)
+  vars:                          # spremenljivke playa; uporabimo jih kot {{ ime }}
+    orodja: [ncdu, htop, jq, tree]
+  tasks:
+    - name: Orodja               # modul apt: vsak paket iz seznama je nameščen (state present)
+      ansible.builtin.apt:
+        name: "{{ orodja }}"
+        state: present
+        update_cache: true
+        cache_valid_time: 3600   # seznam paketov osveži največ enkrat na uro
+
+    - name: Ali je Docker nameščen?
+      ansible.builtin.command: which docker
+      register: which_docker     # rezultat ukaza shranimo v spremenljivko
+      failed_when: false         # manjkajoč docker ni napaka, ampak informacija
+      # TODO: ukaz samo bere, zato Ansible ne sme poročati "changed".
+      # Dodajte vrstico:   changed_when: false
+
+    - name: Izpiši
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }}: docker {{ 'JE' if which_docker.rc == 0 else 'NI' }} nameščen"
+
+    - name: Samo na app hostih   # when: task teče samo pod pogojem
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }} je v skupini app_hosts"
+      when: "'app_hosts' in group_names"

@@ -1,0 +1,43 @@
+---
+# Vrednosti za okolje "aws" (prave VM na AWS). Drugo okolje (test, prod) = druga mapa
+# inventories/<okolje>/ z istimi imeni spremenljivk.
+
+# --- docker ---------------------------------------------------------------
+# Točna verzija Docker Engine (brez "5:" in "-1~ubuntu..."). Dodatno gradivo (rolling
+# upgrade Engine) jo dvigne in požene upgrade.yml.
+docker_version: "29.8.2"
+# Na AWS ni lokalnega cache: slike gredo neposredno z Docker Hub.
+docker_registry_mirrors: []
+# Kontejnerji tečejo naprej, ko se dockerd restarta (nadgradnja Engine, dodatno gradivo).
+docker_live_restore: true
+# Prave VM: chrony in ufw. ufw dovoli SSH in porti za metrike samo z
+# monitoring hosta (na AWS je to isti strežnik); porti, ki jih objavi
+# Docker (-p), gredo mimo ufw. Security group v AWS že omeji dostop od zunaj.
+docker_timesync: true
+docker_firewall: true
+# Na AWS je strežnik hkrati vaša vstopna točka (SSH, tuneli): "limit" bi
+# zaklenil učilnico za skupnim javnim IP po 6 prijavah v 30 s. Gesla varuje
+# fail2ban.
+docker_firewall_ssh_rule: allow
+
+# --- aplikacije (deploy.yml) ----------------------------------------------
+# Vsak element: ime aplikacije (mapa files/apps/<ime>/ s compose.yml.j2),
+# dodatne datoteke iz iste mape in spremenljivke za predloge (app.<ime>).
+# Nova aplikacija = nov element + nova mapa. Rola app se ne spreminja.
+# Predloge app1 so pripravljene; postavite jo sami v vaji A04
+# (ansible-playbook deploy.yml --tags app1), tam spremenite tudi greeting.
+apps:
+  - name: app1
+    files: [html/index.html.j2]   # postane /opt/apps/app1/html/index.html
+    vars:
+      image: nginx:1.30-alpine
+      port: 8080
+      greeting: "Pozdrav iz app1"
+  # app2 (vaja A05): kopija app1 (files/apps/app2 = files/apps/app1),
+  # drugačen pozdrav in port.
+  - name: app2
+    files: [html/index.html.j2]
+    vars:
+      image: nginx:1.30-alpine
+      port: 8081
+      greeting: "Pozdrav iz app2"

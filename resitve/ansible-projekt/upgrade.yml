@@ -1,0 +1,64 @@
+---
+# upgrade.yml: nadgradnja Docker Engine host za hostom.
+#   1. v group_vars nastavite novo docker_version
+#   2. ansible-playbook upgrade.yml
+# Vsak host: preveri live-restore, nadgradi z rolo docker, počakaj, da
+# aplikacije spet odgovarjajo, šele nato naslednji host. Z live-restore
+# kontejnerji med restartom dockerd tečejo naprej.
+
+- name: Facts vseh hostov (rola docker jih rabi za požarni zid, serial jih ne zbere)
+  hosts: docker_hosts
+  gather_facts: true
+  tasks: []
+
+- name: Rolling upgrade Docker Engine
+  hosts: docker_hosts
+  become: true
+  serial: 1
+  order: inventory
+  any_errors_fatal: true      # ob napaki se ustavi, preden pokvari naslednji host
+  pre_tasks:
+    - name: Trenutna verzija Dockerja na hostu
+      ansible.builtin.command: docker version --format '{% raw %}{{.Server.Version}}{% endraw %}'
+      register: docker_current
+      changed_when: false
+      check_mode: false
+
+    - name: Host že ima ciljno verzijo, preskoči ga
+      ansible.builtin.meta: end_host
+      when: docker_current.stdout == docker_version
+
+    - name: Ali je live-restore vklopljen?
+      ansible.builtin.command: docker info --format '{% raw %}{{.LiveRestoreEnabled}}{% endraw %}'
+      register: docker_live_restore_now
+      changed_when: false
+      check_mode: false
+
+    # Brez live-restore bi restart dockerd ustavil vse kontejnerje na hostu.
+    # V produkciji bi tu host najprej vzeli iz load balancerja.
+    - name: Opozorilo, če live-restore ni vklopljen
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }}: live-restore=false, kontejnerji se bodo ob restartu ustavili"
+      when: docker_live_restore_now.stdout != 'true'
+
+  roles:
+    - docker            # namesti docker_version iz group_vars, restart v handlerju
+
+  post_tasks:
+    - name: Aplikacije na hostu spet odgovarjajo
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ item.vars.port }}/"
+        status_code: 200
+      register: app_http
+      retries: 30
+      delay: 2
+      until: app_http.status == 200
+      loop: "{{ apps | selectattr('vars.port', 'defined') | rejectattr('state', 'defined') | list }}"
+      loop_control:
+        label: "{{ item.name }} :{{ item.vars.port }}"
+      when: inventory_hostname in groups['app_hosts']
+
+    # Imena taskov brez {{ }}: pri serial Ansible ime templatira le enkrat (prvi host).
+    - name: Verzija na hostu
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }}: Docker {{ docker_server_version.stdout }}"

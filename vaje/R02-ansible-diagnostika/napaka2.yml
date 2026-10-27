@@ -1,0 +1,20 @@
+---
+# Napaka 2: konfiguracijska datoteka aplikacije.
+- name: Konfiguracija aplikacije
+  hosts: app_hosts
+  become: true
+  vars:
+    app_name: demo
+    app_prot: 8080
+  tasks:
+    - name: Mapa
+      ansible.builtin.file:
+        path: /opt/r02
+        state: directory
+        mode: "0755"
+
+    - name: Datoteka app.conf
+      ansible.builtin.template:
+        src: app.conf.j2
+        dest: /opt/r02/app.conf
+        mode: "0644"

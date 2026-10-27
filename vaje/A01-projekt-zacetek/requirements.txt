@@ -1,0 +1,4 @@
+# Python paketi na CONTROL nodu (venv). Verzije so pinned: vsi v ekipi in CI
+# imajo isti Ansible. Posodobitev: spremenite tu, poženite setup-ansible.sh.
+ansible-core==2.21.5
+ansible-lint==26.10.1

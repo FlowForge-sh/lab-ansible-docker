@@ -1,0 +1,14 @@
+---
+# site.yml: postavi Docker Engine na vseh Docker hostih (rola docker).
+#   ansible-playbook site.yml
+#   ansible-playbook -i inventories/aws/hosts.yml site.yml   (inventory izrecno)
+#   ansible-playbook site.yml --tags docker                  (samo rola docker)
+#   ansible-playbook site.yml --limit <host>                 (en host)
+#   ansible-playbook site.yml --check --diff                 (kaj bi se spremenilo)
+
+- name: Docker Engine na vseh hostih
+  hosts: docker_hosts
+  become: true
+  roles:
+    - role: docker
+      tags: [docker]

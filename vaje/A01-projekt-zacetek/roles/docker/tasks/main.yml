@@ -1,0 +1,117 @@
+---
+- name: Preveri, da je OS podprt
+  ansible.builtin.assert:
+    that: ansible_facts['distribution'] in ['Ubuntu', 'Debian']
+    fail_msg: "Rola docker podpira Ubuntu/Debian, ne {{ ansible_facts['distribution'] }}"
+    quiet: true
+
+- name: Priprava OS (paketi, ura, požarni zid)
+  ansible.builtin.import_tasks: prep.yml
+
+- name: Docker apt ključ
+  ansible.builtin.get_url:
+    url: "https://download.docker.com/linux/{{ ansible_facts['distribution'] | lower }}/gpg"
+    dest: /etc/apt/keyrings/docker.asc
+    mode: "0644"
+
+- name: Docker apt repozitorij (deb822)
+  ansible.builtin.deb822_repository:
+    name: docker
+    types: [deb]
+    uris: "https://download.docker.com/linux/{{ ansible_facts['distribution'] | lower }}"
+    suites: ["{{ ansible_facts['distribution_release'] }}"]
+    components: [stable]
+    architectures: ["{{ docker_apt_arch }}"]
+    signed_by: /etc/apt/keyrings/docker.asc
+  register: docker_repo
+
+# Ne handler: cache mora biti osvežen TAKOJ, ker ga naslednji task (madison) bere.
+- name: Osveži apt cache, če je repozitorij nov  # noqa: no-handler
+  ansible.builtin.apt:
+    update_cache: true
+  when: docker_repo is changed
+
+- name: Poišči točno verzijo paketa za docker_version
+  when: docker_version | length > 0
+  block:
+    - name: Seznam verzij docker-ce v repozitoriju
+      ansible.builtin.command: apt-cache madison docker-ce
+      register: docker_madison
+      changed_when: false
+      check_mode: false    # samo bere: teče tudi ob --check
+
+    - name: Izberi verzijo
+      ansible.builtin.set_fact:
+        docker_pkg_version: >-
+          {{ docker_madison.stdout_lines | map('split', '|') | map(attribute=1) | map('trim')
+             | select('match', '^\d+:' ~ (docker_version | regex_escape) ~ '-') | first | default('') }}
+
+    - name: Verzija mora obstajati
+      ansible.builtin.assert:
+        that: docker_pkg_version | length > 0
+        fail_msg: "docker-ce {{ docker_version }} ni v repozitoriju (apt-cache madison docker-ce)"
+        quiet: true
+
+- name: Namesti Docker Engine
+  ansible.builtin.apt:
+    name: "{{ docker_engine_packages + docker_packages_extra }}"
+    state: present
+    allow_downgrade: false
+    cache_valid_time: 3600
+  vars:
+    docker_engine_packages: >-
+      {{ ['docker-ce', 'docker-ce-cli'] | product([docker_pkg_version | default('')])
+         | map('join', '=') | map('regex_replace', '=$', '') | list }}
+  notify: Restart docker
+
+- name: Mapa /etc/docker
+  ansible.builtin.file:
+    path: /etc/docker
+    state: directory
+    mode: "0755"
+
+- name: Datoteka daemon.json
+  ansible.builtin.template:
+    src: daemon.json.j2
+    dest: /etc/docker/daemon.json
+    mode: "0644"
+    validate: "dockerd --validate --config-file %s"
+  notify: Restart docker
+
+- name: Docker teče in se zažene ob zagonu
+  ansible.builtin.service:
+    name: docker
+    state: started
+    enabled: true
+
+- name: Uporabniki v skupini docker
+  ansible.builtin.user:
+    name: "{{ item }}"
+    groups: docker
+    append: true
+  loop: "{{ docker_users }}"
+
+# SSH ControlPersist bi obdržal staro sejo brez skupine docker;
+# po reset_connection ad-hoc `docker ps` brez become dela takoj.
+# Pri ansible_connection: local (AWS lab) ni seje, ki bi jo zamenjali:
+# skupina velja šele po novi prijavi (exit, ssh lab-control).
+- name: Nova SSH seja, da velja skupina docker
+  ansible.builtin.meta: reset_connection
+
+- name: Uveljavi spremembe (restart) zdaj, ne na koncu playa
+  ansible.builtin.meta: flush_handlers
+
+- name: Docker odgovarja
+  ansible.builtin.command: docker version --format '{% raw %}{{.Server.Version}}{% endraw %}'
+  register: docker_server_version
+  changed_when: false
+  check_mode: false
+  retries: 10
+  delay: 2
+  until: docker_server_version.rc == 0
+
+- name: Preveri nameščeno verzijo
+  ansible.builtin.assert:
+    that: docker_version | length == 0 or docker_server_version.stdout == docker_version
+    fail_msg: "Teče {{ docker_server_version.stdout }}, pričakovano {{ docker_version }}"
+    quiet: true

@@ -1,0 +1,74 @@
+---
+# Tagi: vsak task dobi iz deploy.yml tage app, deploy in ime aplikacije
+# (npr. app1). Predloge (mape, html, compose.yml) imajo še tag config:
+#   ansible-playbook deploy.yml --tags app1     vse za app1
+#   ansible-playbook deploy.yml --tags config   samo predloge vseh aplikacij
+- name: Preveri vhod
+  ansible.builtin.assert:
+    that:
+      - app_name | length > 0
+      - app_state in ['present', 'absent']
+    fail_msg: "Rola app potrebuje app_name in app_state present/absent"
+    quiet: true
+
+- name: Mape aplikacije {{ app_name }}
+  ansible.builtin.file:
+    path: "{{ app_dir }}/{{ item }}"
+    state: directory
+    mode: "0755"
+  loop: "{{ [''] + (app_files | map('dirname') | reject('eq', '') | unique | list) }}"
+  when: app_state == 'present'
+  tags: [config]
+
+- name: Dodatne datoteke za {{ app_name }}
+  ansible.builtin.template:
+    src: "{{ app_templates_dir }}/{{ item }}"
+    dest: "{{ app_dir }}/{{ item | regex_replace('\\.j2$', '') }}"
+    mode: "0644"
+  loop: "{{ app_files }}"
+  vars:
+    app: "{{ app_vars }}"
+  when: app_state == 'present'
+  tags: [config]
+
+- name: Compose datoteka za {{ app_name }}
+  ansible.builtin.template:
+    src: "{{ app_templates_dir }}/compose.yml.j2"
+    dest: "{{ app_dir }}/compose.yml"
+    mode: "0644"
+    validate: "docker compose -f %s config -q"
+  vars:
+    app: "{{ app_vars }}"
+  when: app_state == 'present'
+  tags: [config]
+
+- name: Ali compose datoteka obstaja (za state absent)
+  ansible.builtin.stat:
+    path: "{{ app_dir }}/compose.yml"
+  register: app_compose_file
+
+# pull: missing = sliko potegne samo, če je še ni (ob novem tagu). Neobstoječ
+# tag pade PRED zamenjavo kontejnerja, zato stara verzija teče naprej.
+- name: Compose projekt {{ app_name }}
+  community.docker.docker_compose_v2:
+    project_src: "{{ app_dir }}"
+    project_name: "{{ app_name }}"
+    state: "{{ app_state }}"
+    pull: missing
+    remove_orphans: true
+    wait: "{{ (app_wait | bool) and app_state == 'present' }}"
+    wait_timeout: "{{ app_wait_timeout }}"
+  register: app_result
+  when: app_compose_file.stat.exists
+
+- name: HTTP preverba za {{ app_name }}
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ app_check_port }}/"
+    status_code: 200
+  register: app_http
+  retries: 10
+  delay: 2
+  until: app_http.status == 200
+  when:
+    - app_state == 'present'
+    - app_check_port | string | length > 0

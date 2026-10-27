@@ -1,0 +1,31 @@
+---
+# Vaja A02: rešitev (končno stanje po korakih 6 in 7: changed_when in iotop).
+# Poženite iz ~/projekt:
+#   ansible-playbook ~/resitve/A02-arhitektura/priprava.yml   (ali kopija)
+- name: Osnovna priprava hostov
+  hosts: docker_hosts
+  become: true
+  vars:
+    orodja: [ncdu, htop, jq, tree, iotop]
+  tasks:
+    - name: Orodja
+      ansible.builtin.apt:
+        name: "{{ orodja }}"
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Ali je Docker nameščen?
+      ansible.builtin.command: which docker
+      register: which_docker
+      changed_when: false
+      failed_when: false
+
+    - name: Izpiši
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }}: docker {{ 'JE' if which_docker.rc == 0 else 'NI' }} nameščen"
+
+    - name: Samo na app hostih
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }} je v skupini app_hosts"
+      when: "'app_hosts' in group_names"

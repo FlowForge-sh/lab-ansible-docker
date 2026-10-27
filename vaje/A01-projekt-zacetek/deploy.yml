@@ -1,0 +1,36 @@
+---
+# deploy.yml: postavi vse aplikacije iz seznama "apps" (group_vars) na
+# vse hoste iz skupine app_hosts, vsako kot svoj compose projekt.
+#   ansible-playbook deploy.yml                    (vse aplikacije)
+#   ansible-playbook deploy.yml --tags app1        (samo app1, tag = ime aplikacije)
+#   ansible-playbook deploy.yml --tags app2        (samo app2)
+#   ansible-playbook deploy.yml --tags config      (samo predloge vseh aplikacij,
+#                                                   brez docker compose up)
+#   ansible-playbook deploy.yml -e only=app2       (samo ena aplikacija, s spremenljivko)
+#   ansible-playbook deploy.yml --limit <host>     (samo en host)
+#
+# Tagi: vsak task role app dobi tage "app", "deploy" in ime aplikacije
+# (apply spodaj); predloge imajo še tag "config" (v roli). Include sam ima
+# tag "always", da se zanka izvede pri vsakem --tags, tagi pa izberejo, kateri
+# taski iz role tečejo.
+
+- name: Aplikacije
+  hosts: app_hosts
+  become: true
+  tasks:
+    - name: Deploy aplikacije
+      ansible.builtin.include_role:
+        name: app
+        apply:
+          tags: [app, deploy, "{{ app_item.name }}"]
+      vars:
+        app_name: "{{ app_item.name }}"
+        app_files: "{{ app_item.files | default([]) }}"
+        app_vars: "{{ app_item.vars | default({}) }}"
+        app_state: "{{ app_item.state | default('present') }}"
+      loop: "{{ apps }}"
+      loop_control:
+        loop_var: app_item       # rola sama uporablja "item"
+        label: "{{ app_item.name }}"
+      when: only is not defined or app_item.name == only
+      tags: [always]

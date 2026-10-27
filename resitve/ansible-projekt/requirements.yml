@@ -1,0 +1,10 @@
+---
+# Kolekcije (moduli, ki niso v ansible-core). Namesti setup-ansible.sh
+# v ./collections, da ima projekt svoje verzije neodvisno od sistema.
+collections:
+  - name: community.docker      # docker_compose_v2, docker_container, docker_host_info, ...
+    version: "5.4.0"
+  - name: ansible.posix         # sysctl, authorized_key, synchronize
+    version: "2.2.2"
+  - name: community.general     # ufw (požarni zid na Ubuntu)
+    version: "13.5.0"

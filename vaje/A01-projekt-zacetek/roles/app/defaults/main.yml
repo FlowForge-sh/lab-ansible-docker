@@ -1,0 +1,17 @@
+---
+# Generična rola: postavi EN compose projekt (aplikacijo) na hostu.
+#   app_name:  ime aplikacije = ime compose projekta = mapa files/apps/<ime>/
+#   app_vars:  spremenljivke za predloge (dostopne kot app.<ime>)
+#   app_files: dodatne predloge iz files/apps/<ime>/, npr. html/index.html.j2
+#   app_state: present ali absent
+app_name: ""
+app_vars: {}
+app_files: []
+app_state: present
+app_dir: "/opt/apps/{{ app_name }}"
+app_templates_dir: "{{ playbook_dir }}/files/apps/{{ app_name }}"
+# Počakaj, da kontejnerji tečejo in so zdravi (docker compose up --wait).
+app_wait: true
+app_wait_timeout: 90
+# Po deployu preveri HTTP na tem portu hosta (prazno = brez preverbe).
+app_check_port: "{{ app_vars.port | default('') }}"

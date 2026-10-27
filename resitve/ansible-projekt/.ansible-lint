@@ -1,0 +1,6 @@
+---
+# ansible-lint za ta projekt: profil production, brez nameščenih kolekcij.
+profile: production
+exclude_paths:
+  - collections/
+  - .facts/

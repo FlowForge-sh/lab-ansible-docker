@@ -1,0 +1,15 @@
+---
+# Popravek 1: en task = en modul. Debug je ločen task.
+- name: Mapa za aplikacijo
+  hosts: docker_hosts
+  become: true
+  tasks:
+    - name: Ustvari /opt/r02
+      ansible.builtin.file:
+        path: /opt/r02
+        state: directory
+        mode: "0755"
+
+    - name: Sporočilo
+      ansible.builtin.debug:
+        msg: "mapa je pripravljena"

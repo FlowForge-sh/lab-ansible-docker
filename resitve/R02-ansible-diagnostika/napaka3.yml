@@ -1,0 +1,14 @@
+---
+# Popravek 3: pravo ime modula (docker_host_info, ne docker_host_infos).
+- name: Kontejnerji na app hostih
+  hosts: app_hosts
+  become: true
+  tasks:
+    - name: Seznam kontejnerjev
+      community.docker.docker_host_info:
+        containers: true
+      register: docker_host
+
+    - name: Izpis
+      ansible.builtin.debug:
+        msg: "{{ docker_host.containers | map(attribute='Names') | flatten | list }}"

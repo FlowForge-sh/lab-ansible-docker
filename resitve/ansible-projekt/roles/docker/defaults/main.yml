@@ -1,0 +1,30 @@
+---
+# Verzija Docker Engine, npr. "29.8.2". Prazno = najnovejša iz repozitorija
+# (ni priporočeno za produkcijo: vsak nov node bi dobil drugo verzijo).
+docker_version: ""
+docker_packages_extra:
+  - containerd.io
+  - docker-buildx-plugin
+  - docker-compose-plugin
+# Uporabniki, ki smejo uporabljati docker brez sudo (= root na tem hostu!).
+docker_users:
+  - "{{ ansible_user }}"
+docker_log_max_size: 10m
+docker_log_max_file: 3
+# Prometheus metrike Docker Engine (port 9323). "" = izklopljeno.
+docker_metrics_addr: "0.0.0.0:9323"
+docker_registry_mirrors: []
+# live-restore: kontejnerji tečejo naprej med restartom ali nadgradnjo
+# dockerd. Na samostojnem Docker hostu priporočeno.
+docker_live_restore: true
+# Na pravih VM: true (chrony). V labu so nodi kontejnerji z uro hosta.
+docker_timesync: true
+# Na pravih VM: true (ufw: SSH in porti za metrike samo z monitoring hosta).
+# Pozor: porti, ki jih objavi Docker (-p), gredo MIMO ufw (iptables DOCKER).
+docker_firewall: true
+docker_firewall_ssh_port: 22
+# limit = ufw zavrne IP po 6 povezavah v 30 s (zaščita pred ugibanjem gesel).
+# allow, če je host hkrati vstopna točka za celo učilnico za enim NAT IP.
+docker_firewall_ssh_rule: limit
+# Skupina hostov, ki smejo brati metrike (Prometheus).
+docker_firewall_monitoring_group: monitoring

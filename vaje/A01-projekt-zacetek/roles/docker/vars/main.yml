@@ -1,0 +1,22 @@
+---
+# Konstante role (ne povozite jih v inventoryju).
+docker_apt_arch: "{{ {'x86_64': 'amd64', 'aarch64': 'arm64'}[ansible_facts['architecture']] | default(ansible_facts['architecture']) }}"
+
+# Porti za metrike, ki jih bere Prometheus (teorija 07, neobvezno): Docker Engine,
+# node-exporter, cAdvisor.
+docker_metrics_ports:
+  - { port: "9323", proto: tcp }
+  - { port: "9100", proto: tcp }
+  - { port: "8088", proto: tcp }
+
+# Viri, ki smejo do teh portov: hosti iz skupine monitoring.
+docker_firewall_sources: >-
+  {{ groups[docker_firewall_monitoring_group] | default([])
+     | map('extract', hostvars, ['ansible_facts', 'default_ipv4', 'address']) | list }}
+
+docker_daemon_config: >-
+  {{ {'log-driver': 'json-file',
+      'log-opts': {'max-size': docker_log_max_size, 'max-file': docker_log_max_file | string},
+      'live-restore': docker_live_restore | bool}
+     | combine({'metrics-addr': docker_metrics_addr} if docker_metrics_addr | length > 0 else {})
+     | combine({'registry-mirrors': docker_registry_mirrors} if docker_registry_mirrors | length > 0 else {}) }}

@@ -1,0 +1,32 @@
+# nginx s pozdravno stranjo. Predlogo izpolni rola app; vrednosti so v
+# group_vars (apps[].vars) pod imenom app, ime aplikacije je app_name.
+# Predloga je splošna: za novo aplikacijo (vaja A05) mapo samo kopirate,
+# pozdrav in port spremenite v group_vars.
+# Stran je v mapi ./html (bind mount MAPE, ne datoteke): ko Ansible zamenja
+# index.html, nginx takoj streže novo vsebino brez ponovnega zagona.
+services:
+  web:
+    image: {{ app.image }}
+    ports:
+      - "{{ app.port }}:80"
+    volumes:
+      - ./html:/usr/share/nginx/html:ro
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1/"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 64M
+        reservations:
+          memory: 16M
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+    labels:
+      app: {{ app_name }}

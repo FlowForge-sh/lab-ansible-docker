@@ -1,0 +1,62 @@
+---
+- name: Osnovni paketi (Python moduli za community.docker na hostu)
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - curl
+      - python3-debian      # deb822_repository
+      - python3-docker      # docker_container, docker_host_info, docker_*_info
+      - python3-yaml        # docker_compose_v2
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Mapa za apt ključe
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: "0755"
+
+- name: Sinhronizacija ure (logi, TLS certifikati in metrike ne marajo zamika ure)
+  when: docker_timesync | bool
+  block:
+    - name: Namesti chrony
+      ansible.builtin.apt:
+        name: chrony
+        state: present
+
+    - name: Chrony teče
+      ansible.builtin.service:
+        name: chrony
+        state: started
+        enabled: true
+
+- name: Požarni zid (ufw)
+  when: docker_firewall | bool
+  block:
+    - name: Namesti ufw (na Ubuntu cloud slikah je že, v minimalnih ne)
+      ansible.builtin.apt:
+        name: ufw
+        state: present
+
+    - name: Odpri SSH, preden vklopimo ufw
+      community.general.ufw:
+        rule: "{{ docker_firewall_ssh_rule }}"
+        port: "{{ docker_firewall_ssh_port }}"
+        proto: tcp
+
+    - name: Porti za metrike samo z monitoring hosta
+      community.general.ufw:
+        rule: allow
+        src: "{{ item.1 }}"
+        port: "{{ item.0.port }}"
+        proto: "{{ item.0.proto }}"
+      loop: "{{ docker_metrics_ports | product(docker_firewall_sources) | list }}"
+      loop_control:
+        label: "{{ item.0.port }}/{{ item.0.proto }} iz {{ item.1 }}"
+
+    - name: Vklopi ufw (privzeto zavrni dohodni promet)
+      community.general.ufw:
+        state: enabled
+        policy: deny
+        direction: incoming
